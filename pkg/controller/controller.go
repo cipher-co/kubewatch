@@ -26,6 +26,7 @@ import (
 	
 	"github.com/Sirupsen/logrus"
 	"github.com/bitnami-labs/kubewatch/config"
+	"github.com/bitnami-labs/kubewatch/pkg/cmp"
 	"github.com/bitnami-labs/kubewatch/pkg/event"
 	"github.com/bitnami-labs/kubewatch/pkg/handlers"
 	"github.com/bitnami-labs/kubewatch/pkg/utils"
@@ -62,6 +63,7 @@ type Event struct {
 	eventType    string
 	namespace    string
 	resourceType string
+	extras 		 string
 }
 
 // Controller object
@@ -539,7 +541,9 @@ func newResourceController(client kubernetes.Interface, eventHandler handlers.Ha
 			newEvent.eventType = "update"
 			newEvent.resourceType = resourceType
 			newEvent.namespace = utils.GetObjectMetaData(new).Namespace
-			logrus.WithField("pkg", "kubewatch-"+resourceType).Infof("Processing update to %v: %s", resourceType, newEvent.key)
+			// using extras filed to send the diff occuring in update events
+			newEvent.extras = cmp.Diff(old,new)
+			logrus.WithField("pkg", "kubewatch-"+resourceType).Infof("Processing update to %v: %s", resourceType, newEvent.key)	
 			if err == nil {
 				queue.Add(newEvent)
 			}
@@ -704,6 +708,7 @@ func (c *Controller) processItem(newEvent Event) error {
 			Kind: newEvent.resourceType,
 			Status: status,
 			Reason: "Updated",
+			Extras: newEvent.extras,
 		}
 		if _, ok := global[newEvent.resourceType]; ok {
 			c.eventHandler.ObjectUpdated(obj, kbEvent)

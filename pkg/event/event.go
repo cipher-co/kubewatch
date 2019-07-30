@@ -28,6 +28,7 @@ type Event struct {
 	Reason    string
 	Status    string
 	Name      string
+	Extras    string
 }
 
 // Message returns event message in standard format.
@@ -84,5 +85,10 @@ func (e *Event) Message() (msg string) {
 			e.Name,
 		)
 	}
+
+	if e.Reason == "Updated" {
+		msg = fmt.Sprintf("%s\n```%s```", msg, e.Extras)
+	}
+
 	return msg
 }
