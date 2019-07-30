@@ -528,15 +528,17 @@ func newResourceController(client kubernetes.Interface, eventHandler handlers.Ha
 			newEvent.key, err = cache.MetaNamespaceKeyFunc(obj)
 			newEvent.eventType = "create"
 			newEvent.resourceType = resourceType
+			newEvent.namespace = utils.GetObjectMetaData(obj).Namespace
 			logrus.WithField("pkg", "kubewatch-"+resourceType).Infof("Processing add to %v: %s", resourceType, newEvent.key)
 			if err == nil {
 				queue.Add(newEvent)
 			}
 		},
 		UpdateFunc: func(old, new interface{}) {
-			newEvent.key, err = cache.MetaNamespaceKeyFunc(old)
+			newEvent.key, err = cache.MetaNamespaceKeyFunc(new)
 			newEvent.eventType = "update"
 			newEvent.resourceType = resourceType
+			newEvent.namespace = utils.GetObjectMetaData(new).Namespace
 			logrus.WithField("pkg", "kubewatch-"+resourceType).Infof("Processing update to %v: %s", resourceType, newEvent.key)
 			if err == nil {
 				queue.Add(newEvent)
@@ -641,10 +643,17 @@ func (c *Controller) processItem(newEvent Event) error {
 	var status string
 
 	// namespace retrived from event key incase namespace value is empty
-	if newEvent.namespace == "" && strings.Contains(newEvent.key, "/") {
-		substring := strings.Split(newEvent.key, "/")
-		newEvent.namespace = substring[0]
-		newEvent.key = substring[1]
+	if newEvent.namespace == "" {
+		if objectMeta.Namespace == "" {
+			if strings.Contains(newEvent.key, "/") {
+				substring := strings.Split(newEvent.key, "/")
+				newEvent.namespace = substring[0]
+				newEvent.key = substring[1]
+			}
+		} else {
+			// if object meta has the data take from it
+			newEvent.namespace = objectMeta.Namespace
+		}
 	}
 
 	// process events based on its type
@@ -690,7 +699,7 @@ func (c *Controller) processItem(newEvent Event) error {
 			status = "Warning"
 		}
 		kbEvent := event.Event{
-			Name: newEvent.key,
+			Name: objectMeta.Name,
 			Namespace: newEvent.namespace,
 			Kind: newEvent.resourceType,
 			Status: status,
@@ -704,7 +713,7 @@ func (c *Controller) processItem(newEvent Event) error {
 		return nil
 	case "delete":
 		kbEvent := event.Event{
-			Name:      newEvent.key,
+			Name:      objectMeta.Name,
 			Namespace: newEvent.namespace,
 			Kind:      newEvent.resourceType,
 			Status: "Danger",
